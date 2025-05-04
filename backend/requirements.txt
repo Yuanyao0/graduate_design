@@ -1,0 +1,8 @@
+Flask
+Flask-JWT-Extended
+Flask-Cors
+pymysql 
+flask_sqlalchemy
+pymongo
+werkzeug
+openpyxl
