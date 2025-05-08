@@ -6,13 +6,14 @@ db = SQLAlchemy()
 class User(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(80), unique=True, nullable=False)
+    email = db.Column(db.String(80), unique=True, nullable=False)
     password = db.Column(db.String(255), nullable=False)
 
 class File(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     filename = db.Column(db.String(128))
     user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    upload_time = db.Column(db.DateTime, default=datetime.datetime.now(datetime.timezone.utc))
+    upload_time = db.Column(db.DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8))
     download_times = db.Column(db.Integer, default=0)
     filesize = db.Column(db.Integer)
     fileformat = db.Column(db.String(10))
@@ -37,6 +38,6 @@ class Attrclass(db.Model):
 
 class Attrengname(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    attrName = db.Column(db.String(80), unique=True, nullable=False)
-    engName = db.Column(db.String(80), unique=True, nullable=False)
+    attrName = db.Column(db.String(80), nullable=False)
+    engName = db.Column(db.String(80), nullable=False)
     fileid = db.Column(db.Integer, db.ForeignKey('file.id'), nullable=False)

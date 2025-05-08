@@ -4,13 +4,15 @@ import Home from '../views/Home.vue'
 import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
 import Download from '../views/Download.vue'
+import Userinfo from '../views/Userinfo.vue'
 import { ElMessage } from 'element-plus'
 
 const routes = [
   { path: '/', component: Home, meta: { requiresAuth: true } }, // 需要登录
   { path: '/login', component: Login },
   { path: '/register', component: Register },
-  { path: '/download', component: Download, meta: { requiresAuth: true } }
+  { path: '/download', component: Download, meta: { requiresAuth: true } },
+  { path: '/userinfo', component: Userinfo, meta: { requiresAuth: true } }
 ]
 
 const router = createRouter({
@@ -44,7 +46,10 @@ router.beforeEach((to, from, next) => {
     next('/login')
   } else {
     // 如果 refresh_token 过期，强制用户重新登录
-    if (isRefreshTokenExpired()) {
+    if (!getRefreshTokenExpiry()) {
+      next()
+    }
+    else if (isRefreshTokenExpired()) {
       ElMessage.info('token已过期, 请重新登录')
       userStore.logout()  // 清除用户信息和 token
       next('/login')  // 跳转到登录页面

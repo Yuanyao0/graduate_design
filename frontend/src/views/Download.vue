@@ -1,7 +1,11 @@
 <template>
   <div>
-    <h3>文件下载页面</h3>
-
+    <div class="header-bar">
+      <h3>文件下载页面</h3>
+      <el-button type="text" @click="goBack" class="back-button">
+        <el-icon><ArrowLeft /></el-icon> 返回主界面
+      </el-button>
+    </div>
     <!-- 筛选条件 -->
     <el-form label-width="80px" class="mb-4">
       <el-row :gutter="20">
@@ -123,7 +127,10 @@
 <script setup>
 import { ref, computed, onMounted, watch } from 'vue'
 import { getfileInfo, downloadFile, downloadBatchFiles } from '../api/auth'
+import { useRouter } from 'vue-router'
+import { ArrowLeft } from '@element-plus/icons-vue'
 
+const router = useRouter()
 const files = ref([])
 const currentPage = ref(1)
 const pageSize = 10
@@ -255,6 +262,7 @@ const confirmDownload = async () => {
   }
 }
 
+
 // 批量下载
 const confirmBatchDownload = async () => {
   if (!batchFormat.value || multipleSelection.value.length === 0) return;
@@ -273,6 +281,10 @@ const confirmBatchDownload = async () => {
     console.error('批量下载失败:', err);
   }
 };
+
+const goBack = () => {
+  router.push('/') 
+}
 </script>
 
 <style scoped>
@@ -281,5 +293,16 @@ const confirmBatchDownload = async () => {
 }
 .mt-4 {
   margin-top: 20px;
+}
+.header-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.back-button {
+  font-size: 14px;
+  color: #409EFF;
 }
 </style>

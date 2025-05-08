@@ -4,12 +4,24 @@ export function loginApi(data) {
   return request.post('/login', data)
 }
 
-export function getUserInfo() {
+export function getUserInfoApi() {
   return request.get('/userinfo')
 }
 
 export function registerApi(data) {
   return request.post('/register', data)
+}
+
+export function sendCodeApi(email) {
+  return request.post('/sendcode', {email})
+}
+
+export function updateUserInfoApi(data) {
+  return request.post('/updateUserInfo', data)
+}
+
+export function emailIfexist(email) {
+  return request.post('/checkemail', {email})
 }
 
 export function uploadApi(data) {

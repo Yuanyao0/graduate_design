@@ -9,11 +9,15 @@ import io
 import os
 import pandas as pd
 import zipfile
+import random
+import string
 from models import db, User, File, Attrengname
 from upload_handler import parse_file
 from import_handler import parse_import
 from mongo import mongo_db, collection_map
 from openpyxl.utils import get_column_letter
+from flask_mail import Mail, Message
+from redis_config import r
 
 
 app = Flask(__name__)
@@ -23,7 +27,11 @@ app.config.from_object('config')
 CORS(app, expose_headers=["X-Download-Times"], supports_credentials=True)
 # CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "http://localhost:3000"}})
 db.init_app(app)
+mail = Mail(app)
 
+# 生成验证码
+def generate_code(length=6):
+    return ''.join(random.choices(string.digits, k=length))
 
 # 装饰器，获取userid
 def token_required(f):
@@ -82,46 +90,120 @@ def register():
     data = request.json
     username = data.get('username')
     password = data.get('password')
+    email = data.get('email')
+    code = data.get('code')
     hashed_password = generate_password_hash(password)
+
+    if not all([username, email, password, code]):
+        return jsonify({'message': 'All fields are required'}), 400
     # 查重
+    if User.query.filter_by(email=email).first():
+        return jsonify({'message': 'email already register, please login!'}), 409
     if User.query.filter_by(username=username).first():
         return jsonify({'message': 'Username already exists'}), 409
+    real_code = r.get(f'verify:{email}')
+    if not real_code or real_code != code:
+        return jsonify({'message': 'Invalid or expired verification code'}), 400
 
     # 新建用户
-    new_user = User(username=username, password=hashed_password)
+    new_user = User(username=username, email=email, password=hashed_password)
     db.session.add(new_user)
     db.session.commit()
 
     return jsonify({'message': 'User registered successfully'})
 
+@app.route('/api/sendcode', methods=['POST'])
+def send_code():
+    data = request.get_json()
+    email = data.get('email')
+    if not email:
+        return jsonify({'message': 'Email is required'}), 400
+
+    cooldown_key = f'verify:cooldown:{email}'
+    if r.exists(cooldown_key):
+        return jsonify({'message': 'Please wait before requesting another code'}), 429
+
+    code = generate_code()
+    
+    # 保存验证码（5分钟）
+    r.setex(f'verify:{email}', 300, code)
+    
+    # 设置发送冷却（60秒）
+    r.setex(cooldown_key, 60, '1')
+
+    try:
+        msg = Message("Your Verification Code", sender=app.config['MAIL_USERNAME'], recipients=[email])
+        msg.body = f"Your verification code is: {code} (valid for 5 minutes)"
+        mail.send(msg)
+        return jsonify({'message': 'Verification code sent successfully'})
+    except Exception as e:
+        return jsonify({'message': f'Failed to send email: {str(e)}'}), 500
+
+# 检查邮箱是否存在
+@app.route('/api/checkemail', methods=['POST'])
+def checkemail():
+    data = request.json
+    email = data.get('email')
+    user = User.query.filter_by(email=email).first()
+    if user is None:
+        return jsonify({'message': 'email is not register, please register'}), 409
+    return jsonify({'message': 'email has register'})
+
 # 登录接口
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.json
-    username = data.get('username')
-    input_password = data.get('password')
+    loginways = data.get('loginways')
+    if loginways == 'username':
+        username = data.get('username')
+        input_password = data.get('password')
+        user = User.query.filter_by(username=username).first()
+        if user and check_password_hash(user.password, input_password):
+            access_token = jwt.encode({
+                'username': username,
+                'user_id': user.id,
+                'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2)
+            }, app.config['SECRET_KEY'], algorithm='HS256')
 
-    user = User.query.filter_by(username=username).first()
-    if user and check_password_hash(user.password, input_password):
-        access_token = jwt.encode({
-            'username': username,
-            'user_id': user.id,
-            'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2)
-        }, app.config['SECRET_KEY'], algorithm='HS256')
-
-        refresh_token = jwt.encode({
-            'username': username,
-            'user_id': user.id,
-            'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
-        }, app.config['SECRET_KEY'], algorithm='HS256')
-        refresh_token_expiry = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)).isoformat()
-        return jsonify({
-            'access_token': access_token,
-            'refresh_token': refresh_token,
-            'refresh_token_expiry': refresh_token_expiry
-        })
+            refresh_token = jwt.encode({
+                'username': username,
+                'user_id': user.id,
+                'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
+            }, app.config['SECRET_KEY'], algorithm='HS256')
+            refresh_token_expiry = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)).isoformat()
+            return jsonify({
+                'access_token': access_token,
+                'refresh_token': refresh_token,
+                'refresh_token_expiry': refresh_token_expiry
+            })
+        else:
+            return jsonify({'message': 'Invalid credentials'}), 409
     else:
-        return jsonify({'message': 'Invalid credentials'}), 401
+        email = data.get('email')
+        code = data.get('code')
+        user = User.query.filter_by(email=email).first()
+        real_code = r.get(f'verify:{email}')
+        if code and real_code == code:
+            access_token = jwt.encode({
+                'username': user.username,
+                'user_id': user.id,
+                'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=2)
+            }, app.config['SECRET_KEY'], algorithm='HS256')
+
+            refresh_token = jwt.encode({
+                'username': user.username,
+                'user_id': user.id,
+                'exp': datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)
+            }, app.config['SECRET_KEY'], algorithm='HS256')
+            refresh_token_expiry = (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7)).isoformat()
+            return jsonify({
+                'username': user.username,
+                'access_token': access_token,
+                'refresh_token': refresh_token,
+                'refresh_token_expiry': refresh_token_expiry
+            })
+        else:
+            return jsonify({'message': 'Invalid or expired verification code'}), 409
 
 # 刷新token
 @app.route('/api/refresh', methods=['POST'])
@@ -148,15 +230,46 @@ def refresh_token():
 
 # 获取当前用户信息
 @app.route('/api/userinfo', methods=['GET'])
-def userinfo():
-    token = request.headers.get('Authorization', '').replace('Bearer ', '')
-    try:
-        payload = jwt.decode(token, app.config['SECRET_KEY'], algorithms=['HS256'])
-        return jsonify({'username': payload['username']})
-    except jwt.ExpiredSignatureError:
-        return jsonify({'message': 'Token expired'}), 401
-    except jwt.InvalidTokenError:
-        return jsonify({'message': 'Invalid token'}), 401
+@token_required
+def userinfo(user_id):
+    user = User.query.filter_by(id=user_id).first()
+    return jsonify({'username': user.username,'email': user.email})
+
+
+# 更新当前用户信息
+@app.route('/api/updateUserInfo', methods=['POSt'])
+@token_required
+def updateuserinfo(user_id):
+    data = request.json
+    updateuser = User.query.filter_by(id=user_id).first()
+    if data.get('category') == 'username': 
+        update_username = data.get('username')
+        user = User.query.filter_by(username=update_username).first()
+        if user:
+            return jsonify({'message': 'username already exists'}), 409
+        else:
+            updateuser.username = update_username
+            db.session.commit()
+            return jsonify({'message': 'username already update'})
+    elif data.get('category') == 'passward': 
+        update_passward = data.get('passward')
+        hashed_updatepassword = generate_password_hash(update_passward)
+        updateuser.passward = hashed_updatepassword
+        db.session.commit()
+        return jsonify({'message': 'passward already update'})
+    elif data.get('category') == 'email':
+        update_email = data.get('email')
+        code = data.code
+        user = User.query.filter_by(email=update_email).first()
+        if user:
+            return jsonify({'message': 'email already exists'}), 409
+        real_code = r.get(f'verify:{update_email}')
+        if code and real_code == code:
+            updateuser.email = update_email
+            db.session.commit()
+            return jsonify({'message': 'email already update'})
+        else:
+            return jsonify({'message': 'Invalid or expired verification code'}), 409
 
 # 解析文件
 @app.route("/api/upload", methods=["POST"])
@@ -189,13 +302,21 @@ def import_data(user_id):
     dataType = data["dataType"]
     dataAttr = data["dataAttr"]
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    base_name, ext = os.path.splitext(filename)
+    existing_file = File.query.filter_by(filename=filename, user_id=user_id).first()
+    if existing_file:
+        # 添加时间戳或计数器后缀避免重名
+        filename = f"{base_name}_{(datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=8)).strftime('%Y%m%d%H%M%S')}{ext}"
+        # filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        # existing_file = File.query.filter_by(filename=filename, user_id=user_id).first()
+
     ranges, records, rename_dict = parse_import(data)
     file_stat = os.stat(filepath)
     file_record = File(
         filename=filename,
         user_id=user_id,
         filesize=file_stat.st_size,
-        fileformat=os.path.splitext(filename)[1][1:],
+        fileformat=ext[1:],
         collection = collection_map.get((dataType, dataAttr)),
         datatype=dataType,
         dataattr=dataAttr,
@@ -394,13 +515,14 @@ def download_batch():
     print(1)
 
     with zipfile.ZipFile(memory_zip, 'w', zipfile.ZIP_DEFLATED) as zf:
+        print(1)
+        
         for file_id in ids:
             file = File.query.filter_by(id=file_id).first()
             collection = file.collection
             if not file:
                 return jsonify({'error': 'File not found'}), 404
 
-            export_format = request.args.get('format')
             if export_format not in ['csv', 'excel']:
                 return jsonify({'error': 'Invalid format'}), 400
 

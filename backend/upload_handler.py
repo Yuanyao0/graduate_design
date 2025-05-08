@@ -3,13 +3,12 @@ import pandas as pd
 from config import UPLOAD_FOLDER
 
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
-ALLOWED_EXTENSIONS = {'xlsx'}
+ALLOWED_EXTENSIONS = {'xlsx', 'csv', 'txt'}
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
-def handle_excel(fpath):
-    data = pd.read_excel(fpath, header=None)
+def handle_file(data):
     col_names = data.iloc[0]
     units = data.iloc[1]
     # 拼接列名与单位
@@ -27,7 +26,14 @@ def parse_file(file):
         filepath = os.path.join(UPLOAD_FOLDER, fname)
         file.save(filepath)
         if fname.endswith('.xlsx'):
-            fields = handle_excel(filepath)
+            data = pd.read_excel(filepath, header=None)
+            fields = handle_file(data)
+        if fname.endswith('csv'):
+            data = pd.read_csv(filepath, header=None)
+            fields = handle_file(data)
+        if fname.endswith('txt'):
+            data = pd.read_csv(filepath, sep='\t', header=None)
+            fields = handle_file(data)
         # print(fields)
         return fields
     else:

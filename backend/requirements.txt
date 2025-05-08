@@ -6,3 +6,6 @@ flask_sqlalchemy
 pymongo
 werkzeug
 openpyxl
+XlsxWriter
+redis
+flask-mail
