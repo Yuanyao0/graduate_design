@@ -36,20 +36,40 @@ export function cancelImportApi(data) {
   return request.post('/cancel', data)
 }
 
-export function getfileInfo() {
-  return request.get('/getfileinfo')
+export function getfileInfo(params) {
+  return request.get('/getfileinfo', {params})
 }
 
-export function downloadFile(fileid, data) {
-  return request.get(`/download/${fileid}`, data)
+// export function downloadFile(fileid, data) {
+//   return request.get(`/download/${fileid}`, data)
+// }
+
+// export function downloadBatchFiles(ids, format) {
+//   return request.post(
+//     '/download/batch',
+//     { ids: ids,
+//       format: format
+//     },
+//     { responseType: 'blob' }
+//   )
+// }
+
+export function fetchAttrSuggestions(fieldNames) {
+  return request.post('/attrmatch', {fieldNames})
 }
 
-export function downloadBatchFiles(ids, format) {
-  return request.post(
-    '/download/batch',
-    { ids: ids,
-      format: format
-    },
-    { responseType: 'blob' }
-  )
+export function checkEngnameExist(engName) {
+  return request.post('/checkEngnameExist', {engName})
+}
+
+export function checkfilename(filename) {
+  return request.post('/checkfilename', {filename})
+}
+
+export function querydata(data) {
+  return request.post('/querydata', data)
+}
+
+export function deletefile(fileid) {
+  return request.post('/deletefile', {fileid})
 }

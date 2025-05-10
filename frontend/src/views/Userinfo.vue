@@ -1,7 +1,7 @@
 <template>
   <div class="user-info-container">
     <div class="back-button-container">
-      <el-button type="text" @click="goBack" class="back-button">
+      <el-button :text="true" @click="goBack" class="back-button">
         <el-icon><ArrowLeft /></el-icon> 返回主界面
       </el-button>
     </div>    
@@ -11,7 +11,7 @@
       <!-- 用户名 -->
       <div class="info-item">
         <span>用户名：{{ user.username }}</span>
-        <el-button text @click="editField('username')">修改</el-button>
+        <el-button :link="true" @click="editField('username')">修改</el-button>
       </div>
       <div v-if="editingField === 'username'" style="display: flex; align-items: center; gap: 8px;">
         <el-input
@@ -24,7 +24,7 @@
       <!-- 密码（直接修改） -->
       <div class="info-item">
         <span>密码：******</span>
-        <el-button text @click="editField('password')">修改</el-button>
+        <el-button :link="true" @click="editField('password')">修改</el-button>
       </div>
       <div v-if="editingField === 'password'" style="display: flex; align-items: center; gap: 8px;">
         <el-input
@@ -45,7 +45,7 @@
       <!-- 邮箱 -->
       <div class="info-item">
         <span>邮箱：{{ user.email }}</span>
-        <el-button text @click="editField('email')">修改</el-button>
+        <el-button :link="true" @click="editField('email')">修改</el-button>
       </div>
       <div v-if="editingField === 'email'">
         <el-input v-model="form.email" placeholder="新邮箱" />
